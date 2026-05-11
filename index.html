@@ -232,12 +232,20 @@ let activeFilter = 'all';
 let refreshTimer = null;
 
 /* ────────────────────────────────────────────────────────
-   OBTENER TOKEN AUTOMÁTICAMENTE
-   El Desktop de Webex CC inyecta el token en el
-   localStorage/sessionStorage del iframe con varias
-   claves posibles según la versión del Desktop.
+   LEER PARÁMETROS DE LA URL
+   El layout JSON pasa el token y orgId via STORE:
+   src="...?token=$STORE.auth.accessToken&orgId=$STORE.agent.orgId"
+   El Desktop sustituye esos valores antes de cargar el iframe.
 ──────────────────────────────────────────────────────── */
+const URL_PARAMS = new URLSearchParams(window.location.search);
+
 function getToken() {
+  // 1. URL param — método principal inyectado por el layout JSON
+  const urlToken = URL_PARAMS.get('token');
+  if (urlToken && urlToken.length > 20 && !urlToken.includes('STORE')) {
+    return urlToken.replace(/^Bearer\s+/i, '');
+  }
+  // 2. localStorage fallback
   const keys = ['access_token','wxcc_token','wxccToken','agentx-token','token'];
   for (const k of keys) {
     try {
@@ -245,20 +253,14 @@ function getToken() {
       if (val && val.length > 20) return val.replace(/^Bearer\s+/i, '');
     } catch(e) {}
   }
-  // Intentar acceder al localStorage de la ventana padre (Desktop)
-  try {
-    if (window.parent && window.parent !== window) {
-      for (const k of keys) {
-        const val = window.parent.localStorage.getItem(k);
-        if (val && val.length > 20) return val.replace(/^Bearer\s+/i, '');
-      }
-    }
-  } catch(e) {}
   return null;
 }
 
-/* ── OBTENER ORG ID — desde localStorage o decodificando el JWT ── */
 function getOrgId() {
+  // 1. URL param
+  const urlOrg = URL_PARAMS.get('orgId');
+  if (urlOrg && urlOrg.length > 10 && !urlOrg.includes('STORE')) return urlOrg;
+  // 2. localStorage
   const keys = ['orgId','org_id','wxcc_orgId','organizationId'];
   for (const k of keys) {
     try {
@@ -266,15 +268,7 @@ function getOrgId() {
       if (val && val.length > 10) return val;
     } catch(e) {}
   }
-  try {
-    if (window.parent && window.parent !== window) {
-      for (const k of keys) {
-        const val = window.parent.localStorage.getItem(k);
-        if (val && val.length > 10) return val;
-      }
-    }
-  } catch(e) {}
-  // Extraer del JWT
+  // 3. Extraer del JWT
   try {
     const token = getToken();
     if (token) {
@@ -287,13 +281,18 @@ function getOrgId() {
 
 /* ── DETECTAR REGIÓN ── */
 function getRegion() {
+  // 1. URL param
+  const urlRegion = URL_PARAMS.get('region');
+  if (urlRegion && !urlRegion.includes('STORE')) return urlRegion;
+  // 2. Por hostname del Desktop
   try {
     const host = (window.parent !== window ? window.parent.location.hostname : window.location.hostname);
-    if (host.includes('-eu'))  return 'eu1';
-    if (host.includes('-au'))  return 'au1';
-    if (host.includes('-jp'))  return 'jp1';
+    if (host.includes('eu1') || host.includes('-eu'))  return 'eu1';
+    if (host.includes('au1') || host.includes('-au'))  return 'au1';
+    if (host.includes('jp1') || host.includes('-jp'))  return 'jp1';
+    if (host.includes('us2'))                          return 'us2';
   } catch(e) {}
-  return 'us1';
+  return 'eu1';
 }
 
 /* ── LLAMADA A LA API ── */
