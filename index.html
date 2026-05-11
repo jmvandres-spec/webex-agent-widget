@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Estado del equipo</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #f0f4f8;
+      color: #1a1a2e;
+      min-height: 100vh;
+      padding: 16px;
+    }
+
+    /* ── Header ── */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+    }
+    .header-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: #1a1a2e;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .header-title svg { width: 18px; height: 18px; }
+    .clock {
+      font-size: 12px;
+      color: #6b7280;
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 20px;
+      padding: 3px 10px;
+    }
+
+    /* ── Summary badges ── */
+    .summary {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+    .badge {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 20px;
+      cursor: pointer;
+      border: 1.5px solid transparent;
+      transition: all 0.15s;
+      user-select: none;
+    }
+    .badge-all      { background: #e0e7ff; color: #3730a3; border-color: #c7d2fe; }
+    .badge-available{ background: #d1fae5; color: #065f46; border-color: #6ee7b7; }
+    .badge-idle     { background: #fef3c7; color: #92400e; border-color: #fcd34d; }
+    .badge-busy     { background: #fee2e2; color: #991b1b; border-color: #fca5a5; }
+    .badge-offline  { background: #f3f4f6; color: #374151; border-color: #d1d5db; }
+    .badge.active, .badge:hover { filter: brightness(0.92); border-color: currentColor; }
+
+    /* ── Grid ── */
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 10px;
+    }
+
+    /* ── Agent card ── */
+    .card {
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 14px;
+      padding: 14px 10px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 7px;
+      transition: transform 0.15s, box-shadow 0.15s;
+      animation: fadeIn 0.3s ease both;
+    }
+    .card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ── Avatar ── */
+    .avatar-wrap { position: relative; }
+    .avatar {
+      width: 52px;
+      height: 52px;
+      border-radius: 50%;
+      object-fit: cover;
+      font-size: 17px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 2px solid #e5e7eb;
+    }
+    .avatar img {
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      object-fit: cover;
+    }
+    .status-dot {
+      position: absolute;
+      bottom: 1px;
+      right: 1px;
+      width: 13px;
+      height: 13px;
+      border-radius: 50%;
+      border: 2px solid #fff;
+    }
+    .dot-available { background: #10b981; }
+    .dot-idle      { background: #f59e0b; }
+    .dot-busy      { background: #ef4444; }
+    .dot-offline   { background: #9ca3af; }
+
+    .agent-name {
+      font-size: 12px;
+      font-weight: 600;
+      color: #111827;
+      text-align: center;
+      line-height: 1.3;
+    }
+
+    .status-pill {
+      font-size: 10px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 20px;
+    }
+    .pill-available { background: #d1fae5; color: #065f46; }
+    .pill-idle      { background: #fef3c7; color: #92400e; }
+    .pill-busy      { background: #fee2e2; color: #991b1b; }
+    .pill-offline   { background: #f3f4f6; color: #6b7280; }
+
+    /* ── Empty state ── */
+    .empty {
+      grid-column: 1/-1;
+      text-align: center;
+      padding: 30px;
+      color: #9ca3af;
+      font-size: 13px;
+    }
+
+    /* ── Loading / Error ── */
+    .msg {
+      text-align: center;
+      padding: 30px;
+      font-size: 13px;
+      color: #6b7280;
+    }
+    .msg.error { color: #ef4444; }
+
+    /* ── Refresh button ── */
+    .refresh-btn {
+      background: none;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 4px 8px;
+      cursor: pointer;
+      color: #6b7280;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      transition: background 0.15s;
+    }
+    .refresh-btn:hover { background: #f3f4f6; }
+    .refresh-btn svg { width: 13px; height: 13px; }
+    .spin { animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-title">
+    <svg viewBox="0 0 24 24" fill="none" stroke="#3730a3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+      <circle cx="9" cy="7" r="4"/>
+      <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+      <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+    </svg>
+    Estado del equipo
+  </div>
+  <div style="display:flex;gap:6px;align-items:center">
+    <span class="clock" id="clock">--:--</span>
+    <button class="refresh-btn" id="refreshBtn" onclick="loadAgents()" title="Actualizar">
+      <svg id="refreshIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M23 4v6h-6"/><path d="M1 20v-6h6"/>
+        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+      </svg>
+    </button>
+  </div>
+</div>
+
+<div class="summary" id="summary"></div>
+<div class="grid"   id="grid">
+  <div class="msg" id="statusMsg">Conectando con Webex CC…</div>
+</div>
+
+<script>
+/* ─────────────────────────────────────────────
+   CONFIGURACIÓN — edita estos valores
+───────────────────────────────────────────── */
+const CONFIG = {
+  // Obtén tu token desde: Management Portal → Developer Tools
+  // O en modo agente el Desktop lo expone en window.localStorage
+  token: 'YjExNWM1YWUtMjk1NC00M2RiLTg0OTktMzc1Njg2NTc5MjE1NDc0OTNjMDgtZjM3_PF84_f56120fb-3740-496b-b452-0b3c8d9999cf', // <-- pega aquí tu Bearer token de Webex CC
+  orgId: 'f56120fb-3740-496b-b452-0b3c8d9999cf', // <-- tu Organization ID (Control Hub → cuenta)
+  teamId: '',         // <-- ID del equipo a mostrar (opcional, '' = todos)
+  refreshEvery: 30,   // segundos entre actualizaciones automáticas
+};
+/* ───────────────────────────────────────────── */
+
+const STATUS_MAP = {
+  Available : { label:'Disponible', cls:'available' },
+  Idle      : { label:'Inactivo',   cls:'idle'      },
+  Engaged   : { label:'Ocupado',    cls:'busy'      },
+  RONA      : { label:'RONA',       cls:'busy'      },
+  Offline   : { label:'Fuera',      cls:'offline'   },
+};
+
+const AVATAR_COLORS = [
+  ['#dbeafe','#1e40af'],['#d1fae5','#065f46'],['#fce7f3','#9d174d'],
+  ['#fef3c7','#78350f'],['#ede9fe','#4c1d95'],['#fee2e2','#7f1d1d'],
+  ['#ecfdf5','#064e3b'],['#fef9c3','#713f12'],
+];
+
+let allAgents = [];
+let activeFilter = 'all';
+let refreshTimer = null;
+
+/* ── Intentar leer el token del Desktop SDK si no está configurado ── */
+function getToken() {
+  if (CONFIG.token) return CONFIG.token;
+  try {
+    // Webex CC Agent Desktop expone el token en localStorage
+    const stored = localStorage.getItem('access_token') ||
+                   localStorage.getItem('wxcc_token');
+    if (stored) return stored;
+  } catch(e) {}
+  return null;
+}
+
+/* ── Llamada a la API de Webex CC ── */
+async function fetchAgentStates() {
+  const token = getToken();
+  if (!token) throw new Error('No hay token configurado. Edita CONFIG.token en el código.');
+
+  const baseUrl = 'https://api.wxcc-us1.cisco.com'; // cambia la región si es EU/AU
+  let url = `${baseUrl}/organization/${CONFIG.orgId}/agent-sessions?status=ALL`;
+  if (CONFIG.teamId) url += `&teamId=${CONFIG.teamId}`;
+
+  const res = await fetch(url, {
+    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
+  });
+  if (!res.ok) throw new Error(`Error API: ${res.status} ${res.statusText}`);
+  const data = await res.json();
+  return data.data || data.agentSessions || data || [];
+}
+
+/* ── Convertir respuesta API → formato interno ── */
+function parseAgents(raw) {
+  return raw.map((s, i) => {
+    const state   = s.state || s.agentState || 'Offline';
+    const info    = STATUS_MAP[state] || STATUS_MAP['Offline'];
+    const name    = s.agentName || s.name || 'Agente';
+    const parts   = name.trim().split(' ');
+    const initials= (parts[0][0] + (parts[1] ? parts[1][0] : '')).toUpperCase();
+    const [bg, fg]= AVATAR_COLORS[i % AVATAR_COLORS.length];
+    return { name, initials, avatarUrl: s.avatarUrl || s.photoUrl || '', status: info.cls, label: info.label, bg, fg };
+  });
+}
+
+/* ── Datos de demostración (cuando no hay token) ── */
+function demoAgents() {
+  return [
+    { name:'Ana García',   initials:'AG', avatarUrl:'', status:'available', label:'Disponible', bg:'#dbeafe', fg:'#1e40af' },
+    { name:'Carlos Ruiz',  initials:'CR', avatarUrl:'', status:'busy',      label:'Ocupado',    bg:'#fee2e2', fg:'#7f1d1d' },
+    { name:'María López',  initials:'ML', avatarUrl:'', status:'idle',      label:'Inactivo',   bg:'#fef3c7', fg:'#78350f' },
+    { name:'Pedro Sanz',   initials:'PS', avatarUrl:'', status:'available', label:'Disponible', bg:'#d1fae5', fg:'#065f46' },
+    { name:'Laura Díaz',   initials:'LD', avatarUrl:'', status:'offline',   label:'Fuera',      bg:'#f3f4f6', fg:'#374151' },
+    { name:'Javier Mora',  initials:'JM', avatarUrl:'', status:'busy',      label:'Ocupado',    bg:'#ede9fe', fg:'#4c1d95' },
+    { name:'Sofía Vega',   initials:'SV', avatarUrl:'', status:'available', label:'Disponible', bg:'#fce7f3', fg:'#9d174d' },
+    { name:'Diego Leal',   initials:'DL', avatarUrl:'', status:'idle',      label:'Inactivo',   bg:'#fef9c3', fg:'#713f12' },
+  ];
+}
+
+/* ── Render ── */
+function renderSummary(agents) {
+  const counts = { all: agents.length, available:0, idle:0, busy:0, offline:0 };
+  agents.forEach(a => { if (counts[a.status] !== undefined) counts[a.status]++; });
+  const labels = { all:'Todos', available:'Disponibles', idle:'Inactivos', busy:'Ocupados', offline:'Fuera' };
+  document.getElementById('summary').innerHTML = Object.entries(labels).map(([k, l]) =>
+    `<span class="badge badge-${k} ${activeFilter===k?'active':''}" onclick="setFilter('${k}')">${l} <b>${counts[k]}</b></span>`
+  ).join('');
+}
+
+function renderGrid(agents) {
+  const filtered = activeFilter === 'all' ? agents : agents.filter(a => a.status === activeFilter);
+  const grid = document.getElementById('grid');
+  if (!filtered.length) {
+    grid.innerHTML = '<div class="empty">No hay agentes en este estado</div>';
+    return;
+  }
+  grid.innerHTML = filtered.map((a, i) => `
+    <div class="card" style="animation-delay:${i*40}ms">
+      <div class="avatar-wrap">
+        <div class="avatar" style="background:${a.bg};color:${a.fg}">
+          ${a.avatarUrl
+            ? `<img src="${a.avatarUrl}" alt="${a.name}" onerror="this.parentNode.innerHTML='${a.initials}'">`
+            : a.initials}
+        </div>
+        <span class="status-dot dot-${a.status}"></span>
+      </div>
+      <span class="agent-name">${a.name}</span>
+      <span class="status-pill pill-${a.status}">${a.label}</span>
+    </div>
+  `).join('');
+}
+
+function setFilter(f) {
+  activeFilter = f;
+  renderSummary(allAgents);
+  renderGrid(allAgents);
+}
+
+/* ── Reloj ── */
+function tick() {
+  document.getElementById('clock').textContent =
+    new Date().toLocaleTimeString('es-ES', { hour:'2-digit', minute:'2-digit' });
+}
+tick();
+setInterval(tick, 10000);
+
+/* ── Carga principal ── */
+async function loadAgents() {
+  const icon = document.getElementById('refreshIcon');
+  icon.classList.add('spin');
+
+  try {
+    const raw  = await fetchAgentStates();
+    allAgents  = parseAgents(raw);
+    document.getElementById('statusMsg') && (document.getElementById('statusMsg').remove());
+  } catch(err) {
+    // Sin token → modo demo con aviso
+    allAgents = demoAgents();
+    console.warn('Webex CC API:', err.message, '— mostrando datos de demo');
+  }
+
+  renderSummary(allAgents);
+  renderGrid(allAgents);
+  icon.classList.remove('spin');
+
+  // Auto-refresco
+  clearTimeout(refreshTimer);
+  if (CONFIG.refreshEvery > 0) {
+    refreshTimer = setTimeout(loadAgents, CONFIG.refreshEvery * 1000);
+  }
+}
+
+loadAgents();
+</script>
+</body>
+</html>
