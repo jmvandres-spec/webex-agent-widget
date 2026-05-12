@@ -106,7 +106,7 @@ let refreshTimer = null;
 /* ── Cargar TODOS los usuarios de la org con paginación ── */
 async function fetchAllPeople() {
   let items = [];
-  let url   = `https://webexapis.com/v1/people?max=1000`;
+  let url   = `https://webexapis.com/v1/people?max=1000&callingData=false`;
 
   while (url) {
     const res = await fetch(url, {
