@@ -39,7 +39,6 @@
     .pill-offline   { background: #f3f4f6; color: #6b7280; }
     .empty { grid-column: 1/-1; text-align: center; padding: 30px; color: #9ca3af; font-size: 13px; }
     .banner { font-size: 12px; padding: 8px 12px; border-radius: 8px; margin-bottom: 12px; display: none; }
-    .banner.info  { background: #e0e7ff; color: #3730a3; display: block; }
     .banner.error { background: #fee2e2; color: #991b1b; display: block; }
     .refresh-btn { background: none; border: 1px solid #e5e7eb; border-radius: 8px; padding: 4px 8px; cursor: pointer; color: #6b7280; font-size: 12px; display: flex; align-items: center; gap: 4px; }
     .refresh-btn:hover { background: #f3f4f6; }
@@ -74,24 +73,24 @@
 <div class="banner" id="banner"></div>
 <div class="summary" id="summary"></div>
 <div class="grid" id="grid">
-  <div class="empty">Conectando con Webex CC…</div>
+  <div class="empty">Conectando con Webex…</div>
 </div>
 
 <script>
 const CONFIG = {
-  token  : 'MGMyZmI3OWYtNGViOS00MzFiLWFhYmMtZDdkOWI5OTdjYzBkYmY1OWQ3MWUtZGMx_PF84_f56120fb-3740-496b-b452-0b3c8d9999cf',
-  orgId  : 'f56120fb-3740-496b-b452-0b3c8d9999cf',
-  region : 'eu1',
-  teamId : '',
-  refreshEvery: 30,
+  token        : 'MGMyZmI3OWYtNGViOS00MzFiLWFhYmMtZDdkOWI5OTdjYzBkYmY1OWQ3MWUtZGMx_PF84_f56120fb-3740-496b-b452-0b3c8d9999cf',
+  orgId        : 'Y2lzY29zcGFyazovL3VzL09SR0FOSVpBVElPTi9mNTYxMjBmYi0zNzQwLTQ5NmItYjQ1Mi0wYjNjOGQ5OTk5Y2Y',
+  refreshEvery : 30,
 };
 
+/* Webex presence status → etiqueta y clase CSS */
 const STATUS_MAP = {
-  Available : { label: 'Disponible', cls: 'available' },
-  Idle      : { label: 'Inactivo',   cls: 'idle'      },
-  Engaged   : { label: 'Ocupado',    cls: 'busy'      },
-  RONA      : { label: 'RONA',       cls: 'busy'      },
-  Offline   : { label: 'Fuera',      cls: 'offline'   },
+  active       : { label: 'Disponible', cls: 'available' },
+  inactive     : { label: 'Inactivo',   cls: 'idle'      },
+  DoNotDisturb : { label: 'Ocupado',    cls: 'busy'      },
+  busy         : { label: 'Ocupado',    cls: 'busy'      },
+  OutOfOffice  : { label: 'Fuera',      cls: 'offline'   },
+  unknown      : { label: 'Fuera',      cls: 'offline'   },
 };
 
 const AVATAR_COLORS = [
@@ -104,56 +103,52 @@ let allAgents    = [];
 let activeFilter = 'all';
 let refreshTimer = null;
 
-function getToken()  { return CONFIG.token;  }
-function getOrgId()  { return CONFIG.orgId;  }
-function getRegion() { return CONFIG.region; }
+/* ── Cargar TODOS los usuarios de la org con paginación ── */
+async function fetchAllPeople() {
+  let items = [];
+  let url   = `https://webexapis.com/v1/people?orgId=${CONFIG.orgId}&max=1000`;
 
-async function fetchAgentStates() {
-  const base = `https://api.wxcc-${getRegion()}.cisco.com`;
-  let url = `${base}/organization/${getOrgId()}/agent-sessions?status=ALL`;
-  if (CONFIG.teamId) url += `&teamId=${CONFIG.teamId}`;
+  while (url) {
+    const res = await fetch(url, {
+      headers: { 'Authorization': `Bearer ${CONFIG.token}` }
+    });
+    if (!res.ok) throw new Error(`api_${res.status}`);
+    const data = await res.json();
+    items = items.concat(data.items || []);
 
-  const res = await fetch(url, {
-    headers: {
-      'Authorization': `Bearer ${getToken()}`,
-      'Content-Type' : 'application/json',
-    }
-  });
-
-  if (res.status === 401) throw new Error('token_expired');
-  if (!res.ok) throw new Error(`api_error_${res.status}`);
-
-  const data = await res.json();
-  return data.data || data.agentSessions || data || [];
+    // Paginación via Link header
+    const link = res.headers.get('Link') || '';
+    const next  = link.match(/<([^>]+)>;\s*rel="next"/);
+    url = next ? next[1] : null;
+  }
+  return items;
 }
 
-function parseAgents(raw) {
-  return raw.map((s, i) => {
-    const state    = s.state || s.agentState || 'Offline';
-    const info     = STATUS_MAP[state] || STATUS_MAP['Offline'];
-    const name     = s.agentName || s.name || 'Agente';
-    const parts    = name.trim().split(' ');
-    const initials = (parts[0][0] + (parts[1] ? parts[1][0] : '')).toUpperCase();
-    const [bg, fg] = AVATAR_COLORS[i % AVATAR_COLORS.length];
-    return { name, initials, avatarUrl: s.avatarUrl || s.photoUrl || '', status: info.cls, label: info.label, bg, fg };
-  });
+function parseAgents(people) {
+  return people
+    .filter(p => p.type === 'person' && p.loginEnabled !== false)
+    .map((p, i) => {
+      const rawStatus = p.status || 'unknown';
+      const info      = STATUS_MAP[rawStatus] || STATUS_MAP['unknown'];
+      const name      = p.displayName || `${p.firstName || ''} ${p.lastName || ''}`.trim() || 'Agente';
+      const parts     = name.trim().split(' ');
+      const initials  = (parts[0][0] + (parts[1] ? parts[1][0] : '')).toUpperCase();
+      const [bg, fg]  = AVATAR_COLORS[i % AVATAR_COLORS.length];
+      return {
+        name,
+        initials,
+        avatarUrl : p.avatar || '',
+        status    : info.cls,
+        label     : info.label,
+        bg, fg,
+      };
+    });
 }
 
-function demoAgents() {
-  return [
-    { name:'Ana García',  initials:'AG', avatarUrl:'', status:'available', label:'Disponible', bg:'#dbeafe', fg:'#1e40af' },
-    { name:'Carlos Ruiz', initials:'CR', avatarUrl:'', status:'busy',      label:'Ocupado',    bg:'#fee2e2', fg:'#7f1d1d' },
-    { name:'María López', initials:'ML', avatarUrl:'', status:'idle',      label:'Inactivo',   bg:'#fef3c7', fg:'#78350f' },
-    { name:'Pedro Sanz',  initials:'PS', avatarUrl:'', status:'available', label:'Disponible', bg:'#d1fae5', fg:'#065f46' },
-    { name:'Laura Díaz',  initials:'LD', avatarUrl:'', status:'offline',   label:'Fuera',      bg:'#f3f4f6', fg:'#374151' },
-    { name:'Javier Mora', initials:'JM', avatarUrl:'', status:'busy',      label:'Ocupado',    bg:'#ede9fe', fg:'#4c1d95' },
-  ];
-}
-
-function showBanner(msg, type) {
+function showBanner(msg) {
   const b = document.getElementById('banner');
   b.textContent = msg;
-  b.className = `banner ${type}`;
+  b.className = 'banner error';
 }
 function hideBanner() { document.getElementById('banner').className = 'banner'; }
 
@@ -174,7 +169,9 @@ function renderGrid(agents) {
     <div class="card" style="animation-delay:${i*40}ms">
       <div class="avatar-wrap">
         <div class="avatar" style="background:${a.bg};color:${a.fg}">
-          ${a.avatarUrl ? `<img src="${a.avatarUrl}" alt="${a.name}" onerror="this.style.display='none'">` : a.initials}
+          ${a.avatarUrl
+            ? `<img src="${a.avatarUrl}" alt="${a.name}" onerror="this.parentNode.innerHTML='${a.initials}'">`
+            : a.initials}
         </div>
         <span class="status-dot dot-${a.status}"></span>
       </div>
@@ -200,16 +197,11 @@ setInterval(tick, 10000);
 async function loadAgents() {
   document.getElementById('refreshIcon').classList.add('spin');
   try {
-    const raw = await fetchAgentStates();
-    allAgents = parseAgents(raw);
+    const people = await fetchAllPeople();
+    allAgents    = parseAgents(people);
     hideBanner();
   } catch(err) {
-    allAgents = demoAgents();
-    if (err.message === 'token_expired') {
-      showBanner('⚠️ Token expirado — actualiza el token en el archivo index.html', 'error');
-    } else {
-      showBanner(`⚠️ Error: ${err.message}`, 'error');
-    }
+    showBanner(`⚠️ Error al conectar: ${err.message} — actualiza el token en index.html`);
   }
   renderSummary(allAgents);
   renderGrid(allAgents);
