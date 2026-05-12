@@ -126,7 +126,7 @@ async function fetchAllPeople() {
 
 function parseAgents(people) {
   return people
-    .filter(p => p.type === 'person' && p.loginEnabled !== false)
+    .filter(p => p.type === "person" && p.licenses && p.licenses.some(l => { try { return atob(l).includes(":CE_"); } catch(e) { return false; } }))
     .map((p, i) => {
       const rawStatus = p.status || 'unknown';
       const info      = STATUS_MAP[rawStatus] || STATUS_MAP['unknown'];
