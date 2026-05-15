@@ -78,12 +78,10 @@
 
 <script>
 const CONFIG = {
-  token        : 'MmY0MmNkZDUtNjYxMy00YzJlLTk5NTQtZjNmZmE1NTBjZGY4ZWU2MWQ3NzctM2Iw_PF84_f56120fb-3740-496b-b452-0b3c8d9999cd',
-  orgId        : 'Y2lzY29zcGFyazovL3VzL09SR0FOSVpBVElPTi9mNTYxMjBmYi0zNzQwLTQ5NmItYjQ1Mi0wYjNjOGQ5OTk5Y2Y',
-  refreshEvery : 30,
+  refreshEvery: 30,
+  proxyUrl: 'https://webex-agent-proxy.jmvandres.workers.dev/'
 };
 
-/* Webex presence status → etiqueta y clase CSS */
 const STATUS_MAP = {
   active       : { label: 'Disponible', cls: 'available' },
   inactive     : { label: 'Inactivo',   cls: 'idle'      },
@@ -94,53 +92,55 @@ const STATUS_MAP = {
 };
 
 const AVATAR_COLORS = [
-  ['#dbeafe','#1e40af'],['#d1fae5','#065f46'],['#fce7f3','#9d174d'],
-  ['#fef3c7','#78350f'],['#ede9fe','#4c1d95'],['#fee2e2','#7f1d1d'],
-  ['#ecfdf5','#064e3b'],['#fef9c3','#713f12'],
+  ['#dbeafe','#1e40af'], ['#d1fae5','#065f46'], ['#fce7f3','#9d174d'],
+  ['#fef3c7','#78350f'], ['#ede9fe','#4c1d95'], ['#fee2e2','#7f1d1d'],
+  ['#ecfdf5','#064e3b'], ['#fef9c3','#713f12'],
 ];
 
-let allAgents    = [];
+let allAgents = [];
 let activeFilter = 'all';
 let refreshTimer = null;
 
-/* ── Cargar TODOS los usuarios de la org con paginación ── */
 async function fetchAllPeople() {
-  let items = [];
-  let url   = `https://webexapis.com/v1/people?max=1000&callingData=false`;
-
-  while (url) {
-    const res = await fetch(url, {
-      headers: { 'Authorization': `Bearer ${CONFIG.token}` }
-    });
-    if (!res.ok) throw new Error(`api_${res.status}`);
-    const data = await res.json();
-    items = items.concat(data.items || []);
-
-    // Paginación via Link header
-    const link = res.headers.get('Link') || '';
-    const next  = link.match(/<([^>]+)>;\s*rel="next"/);
-    url = next ? next[1] : null;
-  }
-  return items;
+  const res = await fetch(CONFIG.proxyUrl);
+  if (!res.ok) throw new Error(`api_${res.status}`);
+  const data = await res.json();
+  return data.items || data;
 }
 
 function parseAgents(people) {
   return people
-    .filter(p => p.type === "person" && p.licenses && p.licenses.some(l => { try { return atob(l).includes(":CE_"); } catch(e) { return false; } }))
+    .filter(p =>
+      p.type === 'person' &&
+      p.licenses &&
+      p.licenses.some(l => {
+        try { return atob(l).includes(':CE_'); }
+        catch { return false; }
+      })
+    )
     .map((p, i) => {
       const rawStatus = p.status || 'unknown';
-      const info      = STATUS_MAP[rawStatus] || STATUS_MAP['unknown'];
-      const name      = p.displayName || `${p.firstName || ''} ${p.lastName || ''}`.trim() || 'Agente';
-      const parts     = name.trim().split(' ');
-      const initials  = (parts[0][0] + (parts[1] ? parts[1][0] : '')).toUpperCase();
-      const [bg, fg]  = AVATAR_COLORS[i % AVATAR_COLORS.length];
+      const info = STATUS_MAP[rawStatus] || STATUS_MAP.unknown;
+
+      const name =
+        p.displayName ||
+        `${p.firstName || ''} ${p.lastName || ''}`.trim() ||
+        'Agente';
+
+      const parts = name.trim().split(' ');
+      const initials =
+        ((parts[0]?.[0] || '') + (parts[1]?.[0] || '')).toUpperCase() || 'A';
+
+      const [bg, fg] = AVATAR_COLORS[i % AVATAR_COLORS.length];
+
       return {
         name,
         initials,
-        avatarUrl : p.avatar || '',
-        status    : info.cls,
-        label     : info.label,
-        bg, fg,
+        avatarUrl: p.avatar || '',
+        status: info.cls,
+        label: info.label,
+        bg,
+        fg
       };
     });
 }
@@ -150,64 +150,112 @@ function showBanner(msg) {
   b.textContent = msg;
   b.className = 'banner error';
 }
-function hideBanner() { document.getElementById('banner').className = 'banner'; }
+
+function hideBanner() {
+  document.getElementById('banner').className = 'banner';
+}
 
 function renderSummary(agents) {
-  const counts = { all: agents.length, available:0, idle:0, busy:0, offline:0 };
-  agents.forEach(a => { if (counts[a.status] !== undefined) counts[a.status]++; });
-  const labels = { all:'Todos', available:'Disponibles', idle:'Inactivos', busy:'Ocupados', offline:'Fuera' };
-  document.getElementById('summary').innerHTML = Object.entries(labels).map(([k, l]) =>
-    `<span class="badge badge-${k} ${activeFilter===k?'active':''}" onclick="setFilter('${k}')">${l} <b>${counts[k]}</b></span>`
-  ).join('');
+  const counts = {
+    all: agents.length,
+    available: 0,
+    idle: 0,
+    busy: 0,
+    offline: 0
+  };
+
+  agents.forEach(a => {
+    if (counts[a.status] !== undefined) counts[a.status]++;
+  });
+
+  const labels = {
+    all: 'Todos',
+    available: 'Disponibles',
+    idle: 'Inactivos',
+    busy: 'Ocupados',
+    offline: 'Fuera'
+  };
+
+  document.getElementById('summary').innerHTML =
+    Object.entries(labels)
+      .map(([k, l]) =>
+        `<span class="badge badge-${k} ${activeFilter === k ? 'active' : ''}" onclick="setFilter('${k}')">${l} <b>${counts[k]}</b></span>`
+      )
+      .join('');
 }
 
 function renderGrid(agents) {
-  const list = activeFilter === 'all' ? agents : agents.filter(a => a.status === activeFilter);
+  const list =
+    activeFilter === 'all'
+      ? agents
+      : agents.filter(a => a.status === activeFilter);
+
   const grid = document.getElementById('grid');
-  if (!list.length) { grid.innerHTML = '<div class="empty">No hay agentes en este estado</div>'; return; }
-  grid.innerHTML = list.map((a, i) => `
-    <div class="card" style="animation-delay:${i*40}ms">
-      <div class="avatar-wrap">
-        <div class="avatar" style="background:${a.bg};color:${a.fg}">
-          ${a.avatarUrl
-            ? `<img src="${a.avatarUrl}" alt="${a.name}" onerror="this.parentNode.innerHTML='${a.initials}'">`
-            : a.initials}
+
+  if (!list.length) {
+    grid.innerHTML =
+      '<div class="empty">No hay agentes en este estado</div>';
+    return;
+  }
+
+  grid.innerHTML = list
+    .map((a, i) => `
+      <div class="card" style="animation-delay:${i * 40}ms">
+        <div class="avatar-wrap">
+          <div class="avatar" style="background:${a.bg};color:${a.fg}">
+            ${a.avatarUrl
+              ? `<img src="${a.avatarUrl}" alt="${a.name}" onerror="this.parentNode.innerHTML='${a.initials}'">`
+              : a.initials}
+          </div>
+          <span class="status-dot dot-${a.status}"></span>
         </div>
-        <span class="status-dot dot-${a.status}"></span>
+        <span class="agent-name">${a.name}</span>
+        <span class="status-pill pill-${a.status}">${a.label}</span>
       </div>
-      <span class="agent-name">${a.name}</span>
-      <span class="status-pill pill-${a.status}">${a.label}</span>
-    </div>
-  `).join('');
+    `)
+    .join('');
 }
 
-function setFilter(f) {
-  activeFilter = f;
+function setFilter(filter) {
+  activeFilter = filter;
   renderSummary(allAgents);
   renderGrid(allAgents);
 }
 
 function tick() {
   document.getElementById('clock').textContent =
-    new Date().toLocaleTimeString('es-ES', { hour:'2-digit', minute:'2-digit' });
+    new Date().toLocaleTimeString('es-ES', {
+      hour: '2-digit',
+      minute: '2-digit'
+    });
 }
+
 tick();
 setInterval(tick, 10000);
 
 async function loadAgents() {
   document.getElementById('refreshIcon').classList.add('spin');
+
   try {
     const people = await fetchAllPeople();
-    allAgents    = parseAgents(people);
+    allAgents = parseAgents(people);
     hideBanner();
-  } catch(err) {
-    showBanner(`⚠️ Error al conectar: ${err.message} — actualiza el token en index.html`);
+  } catch (err) {
+    showBanner(`⚠️ Error al conectar: ${err.message}`);
   }
+
   renderSummary(allAgents);
   renderGrid(allAgents);
+
   document.getElementById('refreshIcon').classList.remove('spin');
+
   clearTimeout(refreshTimer);
-  if (CONFIG.refreshEvery > 0) refreshTimer = setTimeout(loadAgents, CONFIG.refreshEvery * 1000);
+  if (CONFIG.refreshEvery > 0) {
+    refreshTimer = setTimeout(
+      loadAgents,
+      CONFIG.refreshEvery * 1000
+    );
+  }
 }
 
 loadAgents();
