@@ -245,12 +245,17 @@ const CONFIG = {
   proxyUrl: 'https://webex-agent-proxy.jmvandres.workers.dev/'
 };
 
+// Mapeo flexible para normalizar los estados que vengan del Worker
 const STATUS_MAP = {
   active:       { label: 'Disponible', cls: 'available' },
+  available:    { label: 'Disponible', cls: 'available' },
+  TargetAvailable: { label: 'Disponible', cls: 'available' },
   inactive:     { label: 'Inactivo',   cls: 'idle' },
+  idle:         { label: 'Inactivo',   cls: 'idle' },
   DoNotDisturb: { label: 'Ocupado',    cls: 'busy' },
   busy:         { label: 'Ocupado',    cls: 'busy' },
   OutOfOffice:  { label: 'Fuera',      cls: 'offline' },
+  offline:      { label: 'Fuera',      cls: 'offline' },
   unknown:      { label: 'Fuera',      cls: 'offline' }
 };
 
@@ -274,61 +279,42 @@ async function fetchAllPeople() {
   if (!res.ok) throw new Error(`api_${res.status}`);
 
   const data = await res.json();
-  console.log("Datos recibidos del Worker:", data); // Permite inspeccionar la estructura en la consola F12
+  console.log("Datos del Worker:", data);
 
-  // Validaciones en cascada para encontrar el array de agentes
   if (Array.isArray(data)) return data;
   if (data && Array.isArray(data.items)) return data.items;
   if (data && data.data && Array.isArray(data.data.items)) return data.data.items;
   if (data && Array.isArray(data.data)) return data.data;
 
-  // Extractor de emergencia: busca cualquier propiedad interna que sea un array
   const posibleArray = Object.values(data).find(val => Array.isArray(val));
   if (posibleArray) return posibleArray;
 
-  console.error('Respuesta inesperada del Worker:', data);
+  console.error('Estructura desconocida:', data);
   throw new Error('formato_respuesta_invalido');
 }
 
 function parseAgents(people) {
-  // Salvavidas: si 'people' no terminó siendo un array, evitamos que la app rompa por completo
-  if (!Array.isArray(people)) {
-    console.error("parseAgents no recibió un array válido:", people);
-    return [];
-  }
+  if (!Array.isArray(people)) return [];
 
+  // Mapeamos DIRECTAMENTE todo lo que devuelva tu worker sin discriminar por licencias
   return people
-    .filter(p =>
-      p && 
-      p.type === 'person' &&
-      p.licenses &&
-      p.licenses.some(l => {
-        try {
-          return atob(l).includes(':CE_');
-        } catch {
-          return false;
-        }
-      })
-    )
+    .filter(p => p && (p.displayName || p.name || p.firstName))
     .map((p, i) => {
-      const rawStatus = p.status || 'unknown';
+      // Intentar extraer el estado real del objeto
+      const rawStatus = p.status || p.presence || p.state || 'unknown';
       const info = STATUS_MAP[rawStatus] || STATUS_MAP.unknown;
 
-      const name =
-        p.displayName ||
-        `${p.firstName || ''} ${p.lastName || ''}`.trim() ||
-        'Agente';
+      // Intentar extraer el nombre real del objeto
+      const name = p.displayName || p.name || `${p.firstName || ''} ${p.lastName || ''}`.trim() || 'Agente';
 
       const parts = name.trim().split(' ');
-      const initials =
-        ((parts[0]?.[0] || '') + (parts[1]?.[0] || '')).toUpperCase() || 'A';
-
+      const initials = ((parts[0]?.[0] || '') + (parts[1]?.[0] || '')).toUpperCase() || 'A';
       const [bg, fg] = AVATAR_COLORS[i % AVATAR_COLORS.length];
 
       return {
         name,
         initials,
-        avatarUrl: p.avatar || '',
+        avatarUrl: p.avatar || p.avatarUrl || '',
         status: info.cls,
         label: info.label,
         bg,
@@ -348,27 +334,13 @@ function hideBanner() {
 }
 
 function renderSummary(agents) {
-  const counts = {
-    all: agents.length,
-    available: 0,
-    idle: 0,
-    busy: 0,
-    offline: 0
-  };
+  const counts = { all: agents.length, available: 0, idle: 0, busy: 0, offline: 0 };
 
   agents.forEach(agent => {
-    if (counts[agent.status] !== undefined) {
-      counts[agent.status]++;
-    }
+    if (counts[agent.status] !== undefined) counts[agent.status]++;
   });
 
-  const labels = {
-    all: 'Todos',
-    available: 'Disponibles',
-    idle: 'Inactivos',
-    busy: 'Ocupados',
-    offline: 'Fuera'
-  };
+  const labels = { all: 'Todos', available: 'Disponibles', idle: 'Inactivos', busy: 'Ocupados', offline: 'Fuera' };
 
   document.getElementById('summary').innerHTML =
     Object.entries(labels)
@@ -379,16 +351,11 @@ function renderSummary(agents) {
 }
 
 function renderGrid(agents) {
-  const list =
-    activeFilter === 'all'
-      ? agents
-      : agents.filter(a => a.status === activeFilter);
-
+  const list = activeFilter === 'all' ? agents : agents.filter(a => a.status === activeFilter);
   const grid = document.getElementById('grid');
 
   if (!list.length) {
-    grid.innerHTML =
-      '<div class="empty">No hay agentes en este estado</div>';
+    grid.innerHTML = '<div class="empty">No hay agentes en este estado</div>';
     return;
   }
 
@@ -416,10 +383,7 @@ function setFilter(filter) {
 
 function tick() {
   document.getElementById('clock').textContent =
-    new Date().toLocaleTimeString('es-ES', {
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+    new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
 }
 
 tick();
@@ -439,7 +403,6 @@ async function loadAgents() {
 
   renderSummary(allAgents);
   renderGrid(allAgents);
-
   document.getElementById('refreshIcon').classList.remove('spin');
 
   clearTimeout(refreshTimer);
