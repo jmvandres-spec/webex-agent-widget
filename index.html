@@ -274,18 +274,32 @@ async function fetchAllPeople() {
   if (!res.ok) throw new Error(`api_${res.status}`);
 
   const data = await res.json();
+  console.log("Datos recibidos del Worker:", data); // Permite inspeccionar la estructura en la consola F12
 
+  // Validaciones en cascada para encontrar el array de agentes
   if (Array.isArray(data)) return data;
   if (data && Array.isArray(data.items)) return data.items;
   if (data && data.data && Array.isArray(data.data.items)) return data.data.items;
+  if (data && Array.isArray(data.data)) return data.data;
+
+  // Extractor de emergencia: busca cualquier propiedad interna que sea un array
+  const posibleArray = Object.values(data).find(val => Array.isArray(val));
+  if (posibleArray) return posibleArray;
 
   console.error('Respuesta inesperada del Worker:', data);
   throw new Error('formato_respuesta_invalido');
 }
 
 function parseAgents(people) {
+  // Salvavidas: si 'people' no terminó siendo un array, evitamos que la app rompa por completo
+  if (!Array.isArray(people)) {
+    console.error("parseAgents no recibió un array válido:", people);
+    return [];
+  }
+
   return people
     .filter(p =>
+      p && 
       p.type === 'person' &&
       p.licenses &&
       p.licenses.some(l => {
