@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Estado del equipo</title>
+  <title>Estado del equipo - Webex CC</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -70,7 +70,7 @@
 
     .grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
       gap: 10px;
     }
 
@@ -114,13 +114,6 @@
       overflow: hidden;
     }
 
-    .avatar img {
-      width: 100%;
-      height: 100%;
-      border-radius: 50%;
-      object-fit: cover;
-    }
-
     .status-dot {
       position: absolute;
       bottom: 1px;
@@ -142,6 +135,21 @@
       color: #111827;
       text-align: center;
       line-height: 1.3;
+    }
+
+    /* NUEVO: Estilo para la Cola del Contact Center */
+    .agent-queue {
+      font-size: 10px;
+      color: #4b5563;
+      background: #f3f4f6;
+      padding: 2px 6px;
+      border-radius: 4px;
+      text-align: center;
+      max-width: 100%;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-top: -2px;
     }
 
     .status-pill {
@@ -193,18 +201,9 @@
       background: #f3f4f6;
     }
 
-    .refresh-btn svg {
-      width: 13px;
-      height: 13px;
-    }
-
-    .spin {
-      animation: spin 1s linear infinite;
-    }
-
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
+    .refresh-btn svg { width: 13px; height: 13px; }
+    .spin { animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
   </style>
 </head>
 <body>
@@ -217,7 +216,7 @@
       <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
       <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
     </svg>
-    Estado del equipo
+    Estado de Agentes WCC
   </div>
 
   <div style="display:flex;gap:6px;align-items:center">
@@ -236,38 +235,32 @@
 <div class="banner" id="banner"></div>
 <div class="summary" id="summary"></div>
 <div class="grid" id="grid">
-  <div class="empty">Conectando con Webex…</div>
+  <div class="empty">Conectando con Webex Contact Center…</div>
 </div>
 
 <script>
 const CONFIG = {
-  refreshEvery: 30,
+  refreshEvery: 20,
   proxyUrl: 'https://webex-agent-proxy.jmvandres.workers.dev/'
 };
 
-// Mapeo flexible para normalizar los estados que vengan del Worker
+// Mapeo adaptado a los estados reales de Webex Contact Center (WCC)
 const STATUS_MAP = {
-  active:       { label: 'Disponible', cls: 'available' },
-  available:    { label: 'Disponible', cls: 'available' },
-  TargetAvailable: { label: 'Disponible', cls: 'available' },
-  inactive:     { label: 'Inactivo',   cls: 'idle' },
-  idle:         { label: 'Inactivo',   cls: 'idle' },
-  DoNotDisturb: { label: 'Ocupado',    cls: 'busy' },
-  busy:         { label: 'Ocupado',    cls: 'busy' },
-  OutOfOffice:  { label: 'Fuera',      cls: 'offline' },
-  offline:      { label: 'Fuera',      cls: 'offline' },
-  unknown:      { label: 'Fuera',      cls: 'offline' }
+  'Available':      { label: 'Disponible', cls: 'available' },
+  'Idle':           { label: 'Inactivo',   cls: 'idle' },
+  'Available_Agent':{ label: 'Disponible', cls: 'available' },
+  'Logged_In':      { label: 'Inactivo',   cls: 'idle' },
+  'Busy':           { label: 'Ocupado',    cls: 'busy' },
+  'On_Call':        { label: 'En Llamada', cls: 'busy' },
+  'Wrap_Up':        { label: 'Trabajo Post',cls: 'busy' },
+  'Not_Ready':      { label: 'Ocupado',    cls: 'busy' },
+  'Logged_Out':     { label: 'Fuera',      cls: 'offline' },
+  'unknown':        { label: 'Fuera',      cls: 'offline' }
 };
 
 const AVATAR_COLORS = [
-  ['#dbeafe','#1e40af'],
-  ['#d1fae5','#065f46'],
-  ['#fce7f3','#9d174d'],
-  ['#fef3c7','#78350f'],
-  ['#ede9fe','#4c1d95'],
-  ['#fee2e2','#7f1d1d'],
-  ['#ecfdf5','#064e3b'],
-  ['#fef9c3','#713f12']
+  ['#dbeafe','#1e40af'], ['#d1fae5','#065f46'], ['#fce7f3','#9d174d'],
+  ['#fef3c7','#78350f'], ['#ede9fe','#4c1d95'], ['#fee2e2','#7f1d1d']
 ];
 
 let allAgents = [];
@@ -277,9 +270,10 @@ let refreshTimer = null;
 async function fetchAllPeople() {
   const res = await fetch(CONFIG.proxyUrl);
   if (!res.ok) throw new Error(`api_${res.status}`);
-
   const data = await res.json();
-  console.log("Datos del Worker:", data);
+  
+  // Imprime en consola para mapear las propiedades exactas del Contact Center
+  console.log("JSON real devuelto por tu Worker:", data);
 
   if (Array.isArray(data)) return data;
   if (data && Array.isArray(data.items)) return data.items;
@@ -289,38 +283,37 @@ async function fetchAllPeople() {
   const posibleArray = Object.values(data).find(val => Array.isArray(val));
   if (posibleArray) return posibleArray;
 
-  console.error('Estructura desconocida:', data);
   throw new Error('formato_respuesta_invalido');
 }
 
-function parseAgents(people) {
-  if (!Array.isArray(people)) return [];
+function parseAgents(dataCC) {
+  if (!Array.isArray(dataCC)) return [];
 
-  // Mapeamos DIRECTAMENTE todo lo que devuelva tu worker sin discriminar por licencias
-  return people
-    .filter(p => p && (p.displayName || p.name || p.firstName))
-    .map((p, i) => {
-      // Intentar extraer el estado real del objeto
-      const rawStatus = p.status || p.presence || p.state || 'unknown';
-      const info = STATUS_MAP[rawStatus] || STATUS_MAP.unknown;
+  return dataCC.map((agent, i) => {
+    // 1. Extraer Estado WCC (Soporta múltiples nomenclaturas de APIs de colas)
+    const rawStatus = agent.agentState || agent.status || agent.state || 'unknown';
+    const info = STATUS_MAP[rawStatus] || STATUS_MAP.unknown;
 
-      // Intentar extraer el nombre real del objeto
-      const name = p.displayName || p.name || `${p.firstName || ''} ${p.lastName || ''}`.trim() || 'Agente';
+    // 2. Extraer Nombre
+    const name = agent.agentName || agent.displayName || agent.name || 'Agente CC';
 
-      const parts = name.trim().split(' ');
-      const initials = ((parts[0]?.[0] || '') + (parts[1]?.[0] || '')).toUpperCase() || 'A';
-      const [bg, fg] = AVATAR_COLORS[i % AVATAR_COLORS.length];
+    // 3. EXTRAER COLA O EQUIPO (Modifica según las llaves exactas de tu JSON)
+    const queue = agent.queueName || agent.queue || agent.teamName || agent.virtualTeamName || 'Sin Cola';
 
-      return {
-        name,
-        initials,
-        avatarUrl: p.avatar || p.avatarUrl || '',
-        status: info.cls,
-        label: info.label,
-        bg,
-        fg
-      };
-    });
+    const parts = name.trim().split(' ');
+    const initials = ((parts[0]?.[0] || '') + (parts[1]?.[0] || '')).toUpperCase() || 'A';
+    const [bg, fg] = AVATAR_COLORS[i % AVATAR_COLORS.length];
+
+    return {
+      name,
+      initials,
+      queue,
+      status: info.cls,
+      label: info.label,
+      bg,
+      fg
+    };
+  });
 }
 
 function showBanner(msg) {
@@ -335,7 +328,6 @@ function hideBanner() {
 
 function renderSummary(agents) {
   const counts = { all: agents.length, available: 0, idle: 0, busy: 0, offline: 0 };
-
   agents.forEach(agent => {
     if (counts[agent.status] !== undefined) counts[agent.status]++;
   });
@@ -363,13 +355,13 @@ function renderGrid(agents) {
     <div class="card" style="animation-delay:${i * 40}ms">
       <div class="avatar-wrap">
         <div class="avatar" style="background:${a.bg};color:${a.fg}">
-          ${a.avatarUrl
-            ? `<img src="${a.avatarUrl}" alt="${a.name}" onerror="this.parentNode.innerHTML='${a.initials}'">`
-            : a.initials}
+          ${a.initials}
         </div>
         <span class="status-dot dot-${a.status}"></span>
       </div>
-      <span class="agent-name">${a.name}</span>
+      <span class="agent-name" title="${a.name}">${a.name}</span>
+      <!-- NUEVO: Plasmado de la Cola asignada debajo del nombre -->
+      <span class="agent-queue" title="Cola: ${a.queue}">🎧 ${a.queue}</span>
       <span class="status-pill pill-${a.status}">${a.label}</span>
     </div>
   `).join('');
@@ -393,12 +385,12 @@ async function loadAgents() {
   document.getElementById('refreshIcon').classList.add('spin');
 
   try {
-    const people = await fetchAllPeople();
-    allAgents = parseAgents(people);
+    const rawData = await fetchAllPeople();
+    allAgents = parseAgents(rawData);
     hideBanner();
   } catch (err) {
     console.error(err);
-    showBanner(`⚠️ Error al conectar: ${err.message}`);
+    showBanner(`⚠️ Error al conectar con el CC: ${err.message}`);
   }
 
   renderSummary(allAgents);
