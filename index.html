@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Estado del equipo - Webex CC</title>
+  <title>Webex CC - Tiempo Real (WebSocket)</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -29,13 +29,32 @@
     }
     .header-title svg { width: 18px; height: 18px; }
 
-    .clock {
-      font-size: 12px;
-      color: #6b7280;
+    /* Indicador de conexión WebSocket */
+    .ws-status {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 20px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
       background: #fff;
       border: 1px solid #e5e7eb;
-      border-radius: 20px;
-      padding: 3px 10px;
+    }
+    .ws-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #9ca3af;
+    }
+    .ws-connected .ws-dot { background: #10b981; animation: pulse 2s infinite; }
+    .ws-connecting .ws-dot { background: #f59e0b; }
+    .ws-disconnected .ws-dot { background: #ef4444; }
+
+    @keyframes pulse {
+      0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+      70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+      100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
     }
 
     .summary {
@@ -53,19 +72,13 @@
       cursor: pointer;
       border: 1.5px solid transparent;
       transition: all 0.15s;
-      user-select: none;
     }
 
     .badge-all       { background: #e0e7ff; color: #3730a3; border-color: #c7d2fe; }
     .badge-available { background: #d1fae5; color: #065f46; border-color: #6ee7b7; }
     .badge-idle      { background: #fef3c7; color: #92400e; border-color: #fcd34d; }
     .badge-offline   { background: #f3f4f6; color: #374151; border-color: #d1d5db; }
-
-    .badge.active,
-    .badge:hover {
-      filter: brightness(0.92);
-      border-color: currentColor;
-    }
+    .badge.active { filter: brightness(0.92); border-color: currentColor; }
 
     .grid {
       display: grid;
@@ -83,23 +96,9 @@
       align-items: center;
       gap: 7px;
       transition: transform 0.15s, box-shadow 0.15s;
-      animation: fadeIn 0.3s ease both;
     }
 
-    .card:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-    }
-
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(6px); }
-      to   { opacity: 1; transform: translateY(0); }
-    }
-
-    .avatar-wrap {
-      position: relative;
-    }
-
+    .avatar-wrap { position: relative; }
     .avatar {
       width: 52px;
       height: 52px;
@@ -110,7 +109,6 @@
       align-items: center;
       justify-content: center;
       border: 2px solid #e5e7eb;
-      overflow: hidden;
       background-size: cover;
       background-position: center;
     }
@@ -122,7 +120,7 @@
       width: 13px;
       height: 13px;
       border-radius: 50%;
-      border: 2px solid #f0f4f8;
+      border: 2px solid #fff;
     }
 
     .dot-available { background: #10b981; }
@@ -134,25 +132,18 @@
       font-weight: 600;
       color: #111827;
       text-align: center;
-      line-height: 1.3;
-      height: 32px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      overflow: hidden;
-    }
-
-    .agent-meta {
-      font-size: 10px;
-      color: #6b7280;
-      background: #f3f4f6;
-      padding: 2px 6px;
-      border-radius: 4px;
-      text-align: center;
       max-width: 100%;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+    }
+
+    .agent-queue {
+      font-size: 10px;
+      color: #4b5563;
+      background: #f3f4f6;
+      padding: 2px 6px;
+      border-radius: 4px;
     }
 
     .status-pill {
@@ -161,51 +152,9 @@
       padding: 2px 8px;
       border-radius: 20px;
     }
-
     .pill-available { background: #d1fae5; color: #065f46; }
     .pill-idle      { background: #fef3c7; color: #92400e; }
     .pill-offline   { background: #f3f4f6; color: #6b7280; }
-
-    .empty {
-      grid-column: 1 / -1;
-      text-align: center;
-      padding: 30px;
-      color: #9ca3af;
-      font-size: 13px;
-    }
-
-    .banner {
-      font-size: 12px;
-      padding: 8px 12px;
-      border-radius: 8px;
-      margin-bottom: 12px;
-      display: none;
-    }
-
-    .banner.error {
-      background: #fee2e2;
-      color: #991b1b;
-      display: block;
-    }
-
-    .refresh-btn {
-      background: none;
-      border: 1px solid #e5e7eb;
-      border-radius: 8px;
-      padding: 4px 8px;
-      cursor: pointer;
-      color: #6b7280;
-      display: flex;
-      align-items: center;
-    }
-
-    .refresh-btn:hover {
-      background: #f3f4f6;
-    }
-
-    .refresh-btn svg { width: 13px; height: 13px; }
-    .spin { animation: spin 1s linear infinite; }
-    @keyframes spin { to { transform: rotate(360deg); } }
   </style>
 </head>
 <body>
@@ -215,38 +164,27 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="#3730a3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
       <circle cx="9" cy="7" r="4"/>
-      <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
-      <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
     </svg>
-    Monitoreo de Agentes Webex
+    Webex CC Live Stream
   </div>
 
-  <div style="display:flex;gap:6px;align-items:center">
-    <span class="clock" id="clock">--:--</span>
-    <button class="refresh-btn" onclick="loadAgents()" title="Actualizar">
-      <svg id="refreshIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M23 4v6h-6"/>
-        <path d="M1 20v-6h6"/>
-        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"/>
-        <path d="M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
-      </svg>
-    </button>
+  <div class="ws-status ws-disconnected" id="wsStatus">
+    <span class="ws-dot"></span>
+    <span id="wsStatusText">Desconectado</span>
   </div>
 </div>
 
-<div class="banner" id="banner"></div>
 <div class="summary" id="summary"></div>
-<div class="grid" id="grid">
-  <div class="empty">Conectando con el servicio de Webex...</div>
-</div>
+<div class="grid" id="grid"></div>
 
 <script>
 const CONFIG = {
-  refreshEvery: 20,
-  proxyUrl: 'https://webex-agent-proxy.jmvandres.workers.dev/'
+  // Tu endpoint que proporciona la lista inicial y/o el Token de Webex
+  proxyUrl: 'https://webex-agent-proxy.jmvandres.workers.dev/',
+  // URL global del servicio WebSocket de Webex (WSS)
+  webexWsUrl: 'wss://wdm-a.webexcontent.com/wdm/api/v1/registration'
 };
 
-/* MAPEO CORREGIDO: Adaptado exactamente al JSON de tu Cloudflare Worker */
 const STATUS_MAP = {
   'active':   { label: 'Disponible', cls: 'available' },
   'inactive': { label: 'Inactivo',   cls: 'idle' },
@@ -254,147 +192,156 @@ const STATUS_MAP = {
 };
 
 const AVATAR_COLORS = [
-  ['#dbeafe','#1e40af'], ['#d1fae5','#065f46'], ['#fce7f3','#9d174d'],
-  ['#fef3c7','#78350f'], ['#ede9fe','#4c1d95'], ['#fee2e2','#7f1d1d']
- ]
+  ['#dbeafe','#1e40af'], ['#d1fae5','#065f46'], ['#fce7f3','#9d174d'], ['#fef3c7','#78350f']
+];
 
-let allAgents = [];
+let agentsMap = new Map(); // Guardamos los agentes indexados por ID para actualización ultra rápida
 let activeFilter = 'all';
-let refreshTimer = null;
+let socket = null;
 
-async function fetchAllPeople() {
-  const res = await fetch(CONFIG.proxyUrl);
-  if (!res.ok) throw new Error(`api_${res.status}`);
-  const data = await res.json();
-  
-  // Extraemos la propiedad "agents" directamente de tu JSON estructura original
-  if (data && Array.isArray(data.agents)) {
-    return data.agents;
+// 1. CARGA INICIAL DE AGENTES (HTTP)
+async function init() {
+  try {
+    updateWsStatus('connecting', 'Cargando agentes...');
+    const res = await fetch(CONFIG.proxyUrl);
+    const data = await res.json();
+    const list = data.agents || [];
+
+    list.forEach((agent, i) => {
+      const rawStatus = String(agent.status).toLowerCase().trim();
+      const info = STATUS_MAP[rawStatus] || STATUS_MAP['unknown'];
+      const parts = agent.name.split(' ');
+      const initials = ((parts[0]?.[0] || '') + (parts[1]?.[0] || '')).toUpperCase();
+      const colors = AVATAR_COLORS[i % AVATAR_COLORS.length];
+
+      agentsMap.set(agent.id, {
+        id: agent.id,
+        name: agent.name,
+        initials,
+        avatar: agent.avatar,
+        queue: agent.email ? agent.email.split('@')[1] : 'Sin Cola',
+        status: info.cls,
+        label: info.label,
+        bg: colors[0],
+        fg: colors[1]
+      });
+    });
+
+    renderUI();
+    
+    // Si tu Worker expone o añade el Bearer token en las cabeceras/propiedades de la respuesta,
+    // úsalo aquí. (Reemplaza 'TU_TOKEN_AQUÍ' si tu worker te lo envía de vuelta).
+    const token = data.token || 'TU_TOKEN_DE_WEBEX_AQUÍ'; 
+    connectWebSocket(token);
+
+  } catch (err) {
+    console.error(err);
+    updateWsStatus('disconnected', 'Error de inicialización');
   }
-  throw new Error('Estructura de JSON inesperada');
 }
 
-function parseAgents(agentsList) {
-  return agentsList.map((agent, i) => {
-    // 1. Mapeo de estado exacto
-    const rawStatus = String(agent.status).toLowerCase().trim();
-    const info = STATUS_MAP[rawStatus] || STATUS_MAP['unknown'];
-
-    // 2. Control e iniciales de Nombre
-    const name = agent.name || 'Agente Webex';
-    const parts = name.trim().split(' ');
-    const initials = ((parts[0]?.[0] || '') + (parts[1]?.[0] || '')).toUpperCase() || 'A';
-    const [bg, fg] = AVATAR_COLORS[i % AVATAR_COLORS.length];
-
-    // 3. Manejo inteligente de metadatos (Email en lugar de cola ausente)
-    const domain = agent.email ? agent.email.split('@')[1] : 'solutel.es';
-
-    return {
-      name,
-      initials,
-      avatar: agent.avatar || '',
-      meta: `📧 ${domain}`,
-      status: info.cls,
-      label: info.label,
-      bg,
-      fg
-    };
-  });
-}
-
-function showBanner(msg) {
-  const banner = document.getElementById('banner');
-  banner.textContent = msg;
-  banner.className = 'banner error';
-}
-
-function hideBanner() {
-  document.getElementById('banner').className = 'banner';
-}
-
-function renderSummary(agents) {
-  const counts = { all: agents.length, available: 0, idle: 0, offline: 0 };
-  agents.forEach(agent => {
-    if (counts[agent.status] !== undefined) counts[agent.status]++;
-  });
-
-  const labels = { all: 'Todos', available: 'Disponibles', idle: 'Inactivos', offline: 'Desconectados' };
-
-  document.getElementById('summary').innerHTML =
-    Object.entries(labels)
-      .map(([key, label]) =>
-        `<span class="badge badge-${key} ${activeFilter === key ? 'active' : ''}" onclick="setFilter('${key}')">${label} <b>${counts[key]}</b></span>`
-      )
-      .join('');
-}
-
-function renderGrid(agents) {
-  const list = activeFilter === 'all' ? agents : agents.filter(a => a.status === activeFilter);
-  const grid = document.getElementById('grid');
-
-  if (!list.length) {
-    grid.innerHTML = '<div class="empty">No hay agentes en este estado</div>';
+// 2. CONEXIÓN POR WEBSOCKET (TIEMPO REAL)
+function connectWebSocket(token) {
+  if (!token || token === 'TU_TOKEN_DE_WEBEX_AQUÍ') {
+    updateWsStatus('disconnected', 'Falta Token de tiempo real');
     return;
   }
 
-  grid.innerHTML = list.map((a, i) => {
-    // Si tiene URL de avatar válida de Webex, la usamos; si no, dejamos las iniciales limpias.
-    const avatarContent = a.avatar 
-      ? `<div class="avatar" style="background-image: url('${a.avatar}')"></div>`
-      : `<div class="avatar" style="background:${a.bg};color:${a.fg}">${a.initials}</div>`;
+  socket = new WebSocket(CONFIG.webexWsUrl);
 
-    return `
-      <div class="card" style="animation-delay:${i * 25}ms">
-        <div class="avatar-wrap">
-          ${avatarContent}
-          <span class="status-dot dot-${a.status}"></span>
-        </div>
-        <span class="agent-name" title="${a.name}">${a.name}</span>
-        <span class="agent-meta">${a.meta}</span>
-        <span class="status-pill pill-${a.status}">${a.label}</span>
+  socket.onopen = () => {
+    updateWsStatus('connected', 'Tiempo Real Activo');
+    
+    // Autenticación y Suscripción al stream de Webex
+    const registerPayload = {
+      id: crypto.randomUUID(),
+      type: "register",
+      headers: { Authorization: `Bearer ${token}` },
+      body: { forceConnect: true, deviceType: "DESKTOP" }
+    };
+    socket.send(JSON.stringify(registerPayload));
+  };
+
+  socket.onmessage = (event) => {
+    try {
+      const msg = JSON.parse(event.data);
+      
+      // Capturamos el evento de cambio de presencia / estado del Contact Center de Cisco
+      if (msg.activity && msg.activity.verb === 'update' || msg.type === 'presence.change') {
+        const actorId = msg.actor?.id || msg.body?.personId;
+        const newRawStatus = msg.body?.status || msg.activity?.object?.status;
+
+        if (actorId && agentsMap.has(actorId) && newRawStatus) {
+          const agent = agentsMap.get(actorId);
+          const info = STATUS_MAP[newRawStatus.toLowerCase().trim()] || STATUS_MAP['unknown'];
+          
+          // Actualizamos únicamente los campos mutados en memoria
+          agent.status = info.cls;
+          agent.label = info.label;
+          
+          // Si el evento reporta cambio de cola de atención (Call Center Event)
+          if(msg.body?.queueName) {
+             agent.queue = msg.body.queueName;
+          }
+
+          agentsMap.set(actorId, agent);
+          
+          // Re-renderizado instantáneo sin parpadeos
+          renderUI();
+        }
+      }
+    } catch (e) {
+      console.error("Error procesando mensaje de WebSocket:", e);
+    }
+  };
+
+  socket.onclose = () => {
+    updateWsStatus('disconnected', 'Reconectando...');
+    setTimeout(() => connectWebSocket(token), 5000); // Auto-reconexión automática
+  };
+}
+
+function updateWsStatus(cls, text) {
+  const el = document.getElementById('wsStatus');
+  el.className = `ws-status ws-${cls}`;
+  document.getElementById('wsStatusText').textContent = text;
+}
+
+function renderUI() {
+  const agentsArray = Array.from(agentsMap.values());
+  
+  // 1. Renderizar Contadores
+  const counts = { all: agentsArray.length, available: 0, idle: 0, offline: 0 };
+  agentsArray.forEach(a => counts[a.status] !== undefined && counts[a.status]++);
+  
+  const labels = { all: 'Todos', available: 'Disponibles', idle: 'Inactivos', offline: 'Fuera' };
+  document.getElementById('summary').innerHTML = Object.entries(labels).map(([key, label]) =>
+    `<span class="badge badge-${key} ${activeFilter === key ? 'active' : ''}" onclick="filterData('${key}')">${label} <b>${counts[key]}</b></span>`
+  ).join('');
+
+  // 2. Renderizar Cuadrícula
+  const filtered = activeFilter === 'all' ? agentsArray : agentsArray.filter(a => a.status === activeFilter);
+  const grid = document.getElementById('grid');
+  
+  grid.innerHTML = filtered.map(a => `
+    <div class="card" id="card-${a.id}">
+      <div class="avatar-wrap">
+        ${a.avatar ? `<div class="avatar" style="background-image:url('${a.avatar}')"></div>` : `<div class="avatar" style="background:${a.bg};color:${a.fg}">${a.initials}</div>`}
+        <span class="status-dot dot-${a.status}"></span>
       </div>
-    `;
-  }).join('');
+      <span class="agent-name">${a.name}</span>
+      <span class="agent-queue">🎧 ${a.queue}</span>
+      <span class="status-pill pill-${a.status}">${a.label}</span>
+    </div>
+  `).join('');
 }
 
-function setFilter(filter) {
+function filterData(filter) {
   activeFilter = filter;
-  renderSummary(allAgents);
-  renderGrid(allAgents);
+  renderUI();
 }
 
-function tick() {
-  document.getElementById('clock').textContent =
-    new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
-}
-
-tick();
-setInterval(tick, 10000);
-
-async function loadAgents() {
-  document.getElementById('refreshIcon').classList.add('spin');
-
-  try {
-    const rawData = await fetchAllPeople();
-    allAgents = parseAgents(rawData);
-    hideBanner();
-  } catch (err) {
-    console.error(err);
-    showBanner(`⚠️ Error al procesar datos del Worker: ${err.message}`);
-  }
-
-  renderSummary(allAgents);
-  renderGrid(allAgents);
-  document.getElementById('refreshIcon').classList.remove('spin');
-
-  clearTimeout(refreshTimer);
-  if (CONFIG.refreshEvery > 0) {
-    refreshTimer = setTimeout(loadAgents, CONFIG.refreshEvery * 1000);
-  }
-}
-
-loadAgents();
+init();
 </script>
-
 </body>
 </html>
